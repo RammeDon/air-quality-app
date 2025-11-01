@@ -1,0 +1,6 @@
+name: air-quality-daily
+
+on:
+  workflow_dispatch:        # manual "Run workflow"
+  schedule:
+    - cron: "11 6 * * *"    # daily 06:11 UTC (07:11 Stockholm in winter)
