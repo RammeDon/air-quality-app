@@ -1,79 +1,57 @@
 name: air-quality-daily
 
 on:
-  workflow_dispatch:
+  workflow_dispatch
   # schedule:
-  #   - cron: '11 6 * * *'   # 06:11 UTC daily (07:11 Stockholm in winter)
+  #   - cron: '11 6 * * *'   # daily 06:11 UTC
 
 jobs:
   schedule_pipelines:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
 
     permissions:
-      contents: write   # needed for committing dashboard files
-
-    env:
-      HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
-      
-      CITY: "stockholm"
-      HORIZON_DAYS: "10"
+      contents: write   # needed for the auto-commit step
 
     steps:
-      - name: Checkout repo content
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Python 3.8
         uses: actions/setup-python@v5
         with:
           python-version: '3.8'
-          cache: 'pip'
 
-      - name: Install Python packages
+      - name: Install deps
         run: |
           python -m pip install --upgrade pip
-
           pip install jupyter nbconvert
+          cd notebooks/ch03
+          pip install -r requirements.txt
 
-          if [ -f "requirements.txt" ]; then pip install -r requirements.txt; fi
-          if [ -f "notebooks/ch03/requirements.txt" ]; then pip install -r notebooks/ch03/requirements.txt; fi
-
-      - name: Execute feature pipeline notebook
+      - name: Run feature pipeline
+        env:
+          HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
         working-directory: notebooks/ch03
         run: |
           jupyter nbconvert --to notebook --execute \
             --ExecutePreprocessor.timeout=1800 \
-            --output /tmp/2_air_quality_feature_pipeline.out.ipynb \
             2_air_quality_feature_pipeline.ipynb
 
-      - name: Execute batch inference notebook
+      - name: Run batch inference
+        env:
+          HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
         working-directory: notebooks/ch03
         run: |
           jupyter nbconvert --to notebook --execute \
             --ExecutePreprocessor.timeout=1800 \
-            --output /tmp/4_air_quality_batch_inference.out.ipynb \
             4_air_quality_batch_inference.ipynb
 
-      - name: Upload executed notebooks & assets (artifacts)
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: run-artifacts
-          path: |
-            /tmp/2_air_quality_feature_pipeline.out.ipynb
-            /tmp/4_air_quality_batch_inference.out.ipynb
-            docs/air-quality/assets/img/**
-          if-no-files-found: warn
-
-      - name: Commit updated dashboard files
+      - name: Publish dashboard (auto-commit)
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "Air Quality Dashboard published"
           commit_options: '--no-verify --signoff'
-          # Adjust these patterns if your notebooks write different files/paths
-          file_pattern: |
-            docs/air-quality/assets/img/*
-            docs/_includes/*
+          file_pattern: 'docs/air-quality/assets/img/* docs/_includes/*'
           repository: .
           status_options: '--untracked-files=no'
           skip_dirty_check: true
